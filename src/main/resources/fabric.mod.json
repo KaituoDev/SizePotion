@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "sizepotion",
+	"version": "${version}",
+	"name": "SizePotion",
+	"description": "Drinkable potions that temporarily enlarge or shrink players.",
+	"license": "CC0-1.0",
+	"icon": "assets/sizepotion/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"sizepotion.SizePotion"
+		]
+	},
+	"mixins": [
+		"sizepotion.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
