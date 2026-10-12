@@ -100,6 +100,10 @@ public final class SizePotion implements ModInitializer {
 		player.sendSystemMessage(Component.literal("倍率为 1 的体型药水无效。"));
 	}
 
+	public static void rejectInvalidPotion(ServerPlayer player) {
+		player.sendSystemMessage(Component.literal("这瓶体型药水的数据无效。"));
+	}
+
 	public static void endIfActive(ServerPlayer player) {
 		Scoreboard scoreboard = player.level().getServer().getScoreboard();
 		Objective objective = scoreboard.getObjective(DURATION_OBJECTIVE);

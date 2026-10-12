@@ -21,6 +21,20 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	testImplementation 'org.junit.jupiter:junit-jupiter:6.0.0'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.0.0'
+}
+
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = 'sizepotion-test'
+		enableClientGameTests = false
+	}
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }
 
 processResources {

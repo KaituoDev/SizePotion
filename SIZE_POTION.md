@@ -1,6 +1,8 @@
 # Size potion implementation
 
-The size potion is a normal drinkable `Material.POTION` carrying custom NBT data. Its behavior is implemented by [GetSizeChangePotionCommand](src/main/java/fun/kaituo/kaituoSurvivalProps/commands/GetSizeChangePotionCommand.java) (creation), [SizeChangePotion](src/main/java/fun/kaituo/kaituoSurvivalProps/props/SizeChangePotion.java) (consumption and cleanup), and [KaituoSurvivalProps](src/main/java/fun/kaituo/kaituoSurvivalProps/KaituoSurvivalProps.java) (registration and timer).
+SizePotion runs only on the dedicated Fabric server; unmodified Minecraft 26.2 clients can connect. The size potion is a vanilla drinkable `minecraft:potion` carrying its transformation parameters in `minecraft:custom_data`. Vanilla potion contents, custom name, and lore give it its appearance. The mod registers no custom items, potions, effects, or data components.
+
+Its behavior is implemented by [SizePotionData](src/main/java/sizepotion/SizePotionData.java) (item creation and data), [ItemStackMixin](src/main/java/sizepotion/mixin/ItemStackMixin.java) (server consumption), and [SizePotion](src/main/java/sizepotion/SizePotion.java) (command, attributes, effects, and timer).
 
 ## Creating a potion
 
@@ -8,7 +10,7 @@ The size potion is a normal drinkable `Material.POTION` carrying custom NBT data
 
 - Requires a player sender with `kaituoprops.getsizepotion` permission.
 - Accepts scales from **0.1 to 16**, excluding **1**, and durations from **1 to 65,535 seconds**.
-- Gives the potion to the sender. Each optional description argument becomes a separate lore line; supported lowercase `&` formatting codes are converted to `§` codes.
+- Gives the potion to the sender, or drops it if their inventory is full. Each optional description word becomes a separate lore line; supported lowercase `&` formatting codes become text component styles.
 - Enlargement potions are cyan (`#3AE4FF`), named `放大药水`; shrinking potions are yellow (`#FFE164`), named `缩小药水`. A colored enlargement/shrinking label and `MM:SS` duration are prepended to the lore.
 
 ## Size and accompanying changes
@@ -28,7 +30,7 @@ Let `s` be the requested scale, and `round1(x) = Math.round(x * 10) / 10.0`. The
 
 Reach and safe fall distance are expressed in blocks. The fall damage multiplier halves the damage multiplier while the safe fall distance separately changes the threshold for fall damage.
 
-Effect levels in the table are **one-based**: `1` means level I, and `0` means no effect. Consumption subtracts one to obtain Bukkit's zero-based amplifier and only adds effects with a nonnegative amplifier. Each effect lasts `duration * 20` ticks. The plugin does not directly set a movement-speed or jump-strength attribute; it uses vanilla Speed, Slowness, and Jump Boost effects. Actual movement and jumping therefore also depend on Minecraft's effect handling and any other active modifiers.
+Effect levels in the table are **one-based**: `1` means level I, and `0` means no effect. Consumption subtracts one to obtain Minecraft's zero-based amplifier and only adds effects with a nonnegative amplifier. Each effect lasts `duration * 20` ticks. The mod does not directly set a movement-speed or jump-strength attribute; it uses vanilla Speed, Slowness, and Jump Boost effects. Actual movement and jumping therefore also depend on Minecraft's effect handling and any other active modifiers.
 
 Enlargement grants matching Speed and Jump Boost levels from I through XVI. Shrinking grants Slowness up to III, with no Speed or Jump Boost added. For scales above `0.775` and below `1`, the formula produces Slowness level `0`, so no Slowness is added.
 
@@ -47,25 +49,25 @@ Every example also sets the fall damage multiplier to `0.5`.
 
 ## Applying and timing the transformation
 
-1. `PlayerItemConsumeEvent` checks for `Material.POTION` and the presence of the `scale` NBT tag. It reads the stored scale, duration, reach, fall parameters, and effect levels; it does not recalculate them on consumption.
+1. The client uses the vanilla drinking animation and sounds. On the server, the `ItemStack.finishUsingItem` wrapper checks for `minecraft:potion` and the presence of `scale` in `minecraft:custom_data`. It reads the stored scale, duration, reach, fall parameters, and effect levels; it does not recalculate them on consumption. Releasing use or switching items before completion does not apply the transformation.
 2. The player's name indexes the `SizeChangeDuration` dummy objective on the main scoreboard. A missing score is initialized to zero. A positive score cancels consumption, preventing another size potion from stacking or refreshing the transformation.
-3. A scale greater than one selects enlargement messaging; a scale below one selects shrinking messaging. A scale of one is rejected and consumption is cancelled. The player receives the duration and a milk-removal hint.
-4. Console `attribute <player> <attribute> base set <value>` commands set `minecraft:generic.scale`, `minecraft:player.block_interaction_range`, `minecraft:player.entity_interaction_range`, `minecraft:generic.fall_damage_multiplier`, and `minecraft:generic.safe_fall_distance`.
-5. The applicable potion effects are added, and the scoreboard countdown is set to `duration * 20`.
+3. A scale of one or invalid data cancels consumption. A rejected drink forces inventory synchronization to correct a vanilla client's predicted empty bottle, including offhand use.
+4. Valid potions complete vanilla consumption, including glass bottle remainders and creative mode item retention. The server then sets the player's scale, block and entity interaction range, fall damage multiplier, and safe fall distance directly through vanilla attributes. Vanilla attribute packets synchronize the size and reach changes to clients.
+5. The applicable potion effects are added, and the scoreboard countdown is set to `duration * 20`. A scale greater than one selects enlargement messaging; a scale below one selects shrinking messaging. The player receives the duration and a milk-removal hint.
 
-The plugin schedules `Countdown` every server tick. For online players, scores above one decrease by one; a remaining nonzero score at or below one triggers cleanup and an expiry message. Duration assumes 20 ticks per second, so server lag can extend elapsed real time. Offline players are skipped.
+The mod processes the countdown at the end of every server tick. For online players, scores above one decrease by one; a remaining nonzero score at or below one triggers cleanup and an expiry message. Duration assumes 20 ticks per second, so server lag can extend elapsed real time. Offline players are skipped.
 
 ## Ending the effect
 
-Drinking milk while the countdown is positive, or allowing the timer to expire, restores the five attribute base values listed above and sets the countdown to zero. Both paths explicitly remove Speed, Jump Boost, and Slowness, then add **Slow Falling I for 60 ticks** (three seconds at 20 TPS). The milk listener runs at `EventPriority.LOW`; normal milk processing may affect the final potion effects seen in-game.
+Drinking milk while the countdown is positive, or allowing the timer to expire, restores the five attribute base values listed above and sets the countdown to zero. Both paths explicitly remove Speed, Jump Boost, and Slowness, then add **Slow Falling I for 60 ticks** (three seconds at 20 TPS). Milk cleanup runs after vanilla milk consumption, so the new Slow Falling effect is preserved. The wrapper remembers that the item was milk before consumption empties the last bucket.
 
 Cleanup restores hardcoded defaults, not a saved snapshot of the player's original attributes or potion effects. Consequently, it can overwrite custom base values and remove Speed, Jump Boost, or Slowness acquired from other sources. No explicit health, attack damage, armor, mining speed, or step-height changes are made by this implementation.
 
 ## Implementation limitations
 
-- The already-transformed message suggests reconnecting to clear the effect, but this repository has no join/quit cleanup handler. Its countdown simply skips offline players and resumes processing when they are online again.
-- Plugin disable unregisters listeners and cancels scheduled tasks without explicitly restoring transformed players.
-- The `scale` tag is the only item-identification check. Consumption trusts the other NBT values and does not repeat the command's range validation. The command also does not explicitly reject non-finite floating-point input such as `NaN`.
-- Neither consume handler uses `ignoreCancelled = true` or checks whether another listener has cancelled the event. Attribute-command success and potion-effect application results are not checked.
+- The countdown skips offline players and resumes when they return. There is no explicit shutdown cleanup.
+- The `scale` tag identifies a size potion. Consumption validates the scale, duration, and finite nonnegative attribute/effect values, but operators can create custom data with different values from the command's formulas.
+- Cleanup restores fixed vanilla defaults rather than saving the previous attributes and effects, so changes from other sources may be overwritten.
+- The mod is marked for the physical server environment; installing it in a client does not enable it for singleplayer or LAN hosting.
 
-This document describes the repository's code; it is not an in-game verification of server behavior.
+`./gradlew build` runs the unit test and dedicated-server GameTests, including vanilla item serialization, consumption, rejection, and milk cleanup.

@@ -1,5 +1,7 @@
 package sizepotion;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +23,18 @@ import net.minecraft.world.item.component.ItemLore;
 public record SizePotionData(double scale, int durationSeconds, double blockInteractionRange,
 		double entityInteractionRange, double fallDamageMultiplier, double safeFallDistance,
 		int speedEffectLevel, int jumpEffectLevel, int slownessEffectLevel) {
+
+	public static final Codec<SizePotionData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+		Codec.DOUBLE.fieldOf("scale").forGetter(SizePotionData::scale),
+		Codec.INT.fieldOf("duration").forGetter(SizePotionData::durationSeconds),
+		Codec.DOUBLE.fieldOf("blockInteractionRange").forGetter(SizePotionData::blockInteractionRange),
+		Codec.DOUBLE.fieldOf("entityInteractionRange").forGetter(SizePotionData::entityInteractionRange),
+		Codec.DOUBLE.fieldOf("fallDamageMultiplier").forGetter(SizePotionData::fallDamageMultiplier),
+		Codec.DOUBLE.fieldOf("safeFallDistance").forGetter(SizePotionData::safeFallDistance),
+		Codec.INT.fieldOf("speedEffectLevel").forGetter(SizePotionData::speedEffectLevel),
+		Codec.INT.fieldOf("jumpEffectLevel").forGetter(SizePotionData::jumpEffectLevel),
+		Codec.INT.fieldOf("slownessEffectLevel").forGetter(SizePotionData::slownessEffectLevel)
+	).apply(instance, SizePotionData::new));
 
 	public static SizePotionData create(double scale, int durationSeconds) {
 		int enlargementLevel = scale > 1 ? (int) Math.floor(scale) : 0;
@@ -48,6 +62,16 @@ public record SizePotionData(double scale, int durationSeconds, double blockInte
 			tag.getIntOr("speedEffectLevel", 0),
 			tag.getIntOr("jumpEffectLevel", 0),
 			tag.getIntOr("slownessEffectLevel", 0)));
+	}
+
+	public boolean isValid() {
+		return Double.isFinite(scale) && scale >= 0.1 && scale <= 16 && scale != 1
+			&& durationSeconds >= 1 && durationSeconds <= 65535
+			&& Double.isFinite(blockInteractionRange) && blockInteractionRange >= 0
+			&& Double.isFinite(entityInteractionRange) && entityInteractionRange >= 0
+			&& Double.isFinite(fallDamageMultiplier) && fallDamageMultiplier >= 0
+			&& Double.isFinite(safeFallDistance) && safeFallDistance >= 0
+			&& speedEffectLevel >= 0 && jumpEffectLevel >= 0 && slownessEffectLevel >= 0;
 	}
 
 	public ItemStack toItemStack(String description) {
